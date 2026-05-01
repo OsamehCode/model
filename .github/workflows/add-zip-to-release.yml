@@ -1,0 +1,55 @@
+name: Add Zip to DermLIP Release
+
+on:
+  workflow_dispatch:   # اجرای دستی
+
+jobs:
+  add-zip:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # اجازه آپلود به Release
+    steps:
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install huggingface_hub
+        run: pip install huggingface_hub
+
+      - name: Download all model files
+        run: |
+          python -c "
+          from huggingface_hub import hf_hub_download
+          import os
+          model_id = 'redlessone/DermLIP_PanDerm-base-w-PubMed-256'
+          files = [
+              'open_clip_model.safetensors',
+              'open_clip_pytorch_model.bin',
+              'open_clip_config.json',
+              'tokenizer.json',
+              'tokenizer_config.json',
+              'special_tokens_map.json',
+              'vocab.txt'
+          ]
+          os.makedirs('model_files', exist_ok=True)
+          for f in files:
+              hf_hub_download(
+                  repo_id=model_id,
+                  filename=f,
+                  local_dir='./model_files',
+                  local_dir_use_symlinks=False
+              )
+          "
+
+      - name: Create zip archive
+        run: |
+          zip -r DermLIP_PanDerm-base-w-PubMed-256.zip model_files/
+
+      - name: Upload zip to existing Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: dermlip-v1.0   # همان tag قبلی
+          files: DermLIP_PanDerm-base-w-PubMed-256.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
