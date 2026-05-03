@@ -1,47 +1,58 @@
-name: Full Proxy Server
+name: SSH Proxy Tunnel
 
 on:
   workflow_dispatch:
 
 jobs:
-  proxy:
+  ssh-tunnel:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    timeout-minutes: 360 # ۶ ساعت
     steps:
-      - name: Setup
+      - name: Setup SSH and Tinyproxy
         run: |
           sudo apt-get update
-          sudo apt-get install -y tinyproxy wget
-          
-          # پیکربندی tinyproxy
+          sudo apt-get install -y openssh-server tinyproxy wget
+
+          # تنظیمات Tinyproxy برای قبول هر اتصالی
           sudo sed -i 's/^Allow 127.0.0.1/#Allow 127.0.0.1/' /etc/tinyproxy/tinyproxy.conf
-          sudo sed -i 's/^Allow ::1/#Allow ::1/' /etc/tinyproxy/tinyproxy.conf
           echo "Allow 0.0.0.0/0" | sudo tee -a /etc/tinyproxy/tinyproxy.conf
           sudo systemctl restart tinyproxy
-          
-          # نصب cloudflared
+
+          # تنظیم SSH برای قبول لاگین با پسورد (و قطع دسترسی root)
+          sudo sed -i 's/^#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+          sudo sed -i 's/^PasswordAuthentication no/#PasswordAuthentication no/' /etc/ssh/sshd_config
+          sudo systemctl restart ssh
+
+          # ست کردن پسورد برای کاربر runner
+          echo "runner:temppass123" | sudo chpasswd
+
+      - name: Install cloudflared for SSH tunnel
+        run: |
           wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
           chmod +x cloudflared-linux-amd64
           sudo mv cloudflared-linux-amd64 /usr/local/bin/cloudflared
 
-      - name: Create Tunnel
+      - name: Start SSH Tunnel
         run: |
-          echo "🚀 Starting proxy tunnel..."
-          cloudflared tunnel --url http://localhost:8888 2>&1 | tee tunnel.log &
-          
+          echo "🚀 در حال ساخت تونل SSH..."
+          # تونل برای پورت 22 (SSH) ایجاد میشه
+          cloudflared tunnel --url ssh://localhost:22 2>&1 | tee tunnel.log &
+
           sleep 20
-          
           TUNNEL_URL=$(grep -oP 'https://[a-z0-9-]+\.trycloudflare\.com' tunnel.log | head -1)
-          
+
           echo "=============================================="
-          echo "✅ YOUR PROXY ADDRESS:"
+          echo "✅ تونل SSH آماده است!"
           echo ""
-          echo "   🌐 $TUNNEL_URL"
-          echo "   📍 Port: 8888"
+          echo "📌 Host: $TUNNEL_URL"
+          echo "👤 User: runner"
+          echo "🔑 Pass: temppass123"
           echo ""
-          echo "   Configure your browser/system with:"
-          echo "   HTTP Proxy: $TUNNEL_URL:8888"
+          echo "برای اتصال، از دستور زیر در کامپیوتر خودتون استفاده کنید:"
+          echo "ssh -o 'StrictHostKeyChecking no' -D 1080 -N runner@${TUNNEL_URL#https://} -p 443"
           echo ""
+          echo "سپس پروکسی مرورگرتون رو روی SOCKS5 با آدرس 127.0.0.1:1080 تنظیم کنید."
           echo "=============================================="
-          
+
+          # ۶ ساعت فعال بمونه
           sleep 21600
