@@ -28,8 +28,7 @@ jobs:
 
           os.makedirs('model_files', exist_ok=True)
 
-          for filename in files_to_download:
-              print(f'Downloading {filename}...')
+           
               path = hf_hub_download(
                   repo_id=model_id,
                   filename=filename,
