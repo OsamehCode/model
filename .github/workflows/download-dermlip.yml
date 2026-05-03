@@ -20,22 +20,18 @@ jobs:
       - name: Download Model Files
         run: |
           python -c "
-          from huggingface_hub import hf_hub_download
-          import os, shutil
-
+          from huggingface_hub import snapshot_download
+          
           model_id = 'redlessone/DermLIP_PanDerm-base-w-PubMed-256'
           
-
-          os.makedirs('model_files', exist_ok=True)
-
-           
-              path = hf_hub_download(
-                  repo_id=model_id,
-                  filename=filename,
-                  local_dir='./model_files',
-                  local_dir_use_symlinks=False
-              )
-              print(f'Downloaded to {path}')
+          print(f'Downloading all files from {model_id}...')
+          # snapshot_download کل ریپازیتوری را دانلود می‌کند
+          path = snapshot_download(
+              repo_id=model_id,
+              local_dir='./model_files',
+              local_dir_use_symlinks=False
+          )
+          print(f'Successfully downloaded all files to {path}')
           "
 
       - name: Create Release and Upload Files
@@ -43,7 +39,7 @@ jobs:
         with:
           tag_name: dermlip-v1.0
           name: "DermLIP PanDerm Model v1.0"
-          body: "A dermatology vision-language model (CLIP-style). Contains safetensors and PyTorch files."
+          body: "A dermatology vision-language model (CLIP-style). Contains all model files from Hugging Face."
           files: |
             model_files/*
         env:
