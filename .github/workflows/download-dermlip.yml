@@ -24,15 +24,7 @@ jobs:
           import os, shutil
 
           model_id = 'redlessone/DermLIP_PanDerm-base-w-PubMed-256'
-          files_to_download = [
-              'open_clip_model.safetensors',
-              'open_clip_pytorch_model.bin',
-              'open_clip_config.json',
-              'tokenizer.json',
-              'tokenizer_config.json',
-              'special_tokens_map.json',
-              'vocab.txt'
-          ]
+          
 
           os.makedirs('model_files', exist_ok=True)
 
