@@ -1,91 +1,56 @@
 import os
-import sys
-import requests
-from huggingface_hub import list_repo_files, hf_hub_url
+import shutil
 
-# نام کامل و صحیح مدل
-MODEL_NAME = "redlessone/DermLIP_PanDerm-base-w-PubMed-256"
-OUTPUT_DIR = "model_files"
-CHUNK_SIZE = 90 * 1024 * 1024   # ۹۰ مگابایت
+MODEL_DIR = "model_files"        # فایل‌های دانلودشدهٔ اصلی
+CHUNKS_DIR = "model_chunks"      # پوشه‌ای که قطعات در آن ذخیره می‌شوند
+SPLIT_SIZE = 90 * 1024 * 1024    # ۹۰ مگابایت
 
-# مدیریت امن توکن: اگر HF_TOKEN خالی باشد از None استفاده کن
-raw_token = os.getenv("HF_TOKEN")
-HF_TOKEN = raw_token if raw_token not in (None, "") else None
-
-def download_file_in_chunks(url, dest_path, file_size):
-    """دانلود تکه‌تکه و یکپارچه‌سازی فایل‌های بزرگتر از CHUNK_SIZE"""
-    os.makedirs(os.path.dirname(dest_path) if os.path.dirname(dest_path) else ".", exist_ok=True)
-
-    part_files = []
-    for start in range(0, file_size, CHUNK_SIZE):
-        end = min(start + CHUNK_SIZE - 1, file_size - 1)
-        headers = {"Range": f"bytes={start}-{end}"}
-        if HF_TOKEN:
-            headers["Authorization"] = f"Bearer {HF_TOKEN}"
-
-        print(f"  دریافت بازهٔ {start}-{end} از {file_size} بایت ...")
-        resp = requests.get(url, headers=headers, stream=True)
-        resp.raise_for_status()
-
-        chunk_path = f"{dest_path}.part{len(part_files):04d}"
-        with open(chunk_path, "wb") as f:
-            for chunk in resp.iter_content(chunk_size=8192):
-                f.write(chunk)
-        part_files.append(chunk_path)
-
-    # چسباندن تکه‌ها به هم
-    print("  یکپارچه‌سازی تکه‌ها ...")
-    with open(dest_path, "wb") as outfile:
-        for part in part_files:
-            with open(part, "rb") as infile:
-                outfile.write(infile.read())
-            os.remove(part)   # حذف تکهٔ موقت
-    print(f"  ذخیره شد: {dest_path}")
+def split_file(src_path, dest_dir, original_rel_path):
+    """فایل بزرگ را به قطعات ۹۰MB تقسیم کرده و در مسیر مقصد ذخیره می‌کند."""
+    os.makedirs(dest_dir, exist_ok=True)
+    base_name = os.path.basename(original_rel_path)
+    part_num = 0
+    with open(src_path, "rb") as f:
+        while True:
+            chunk = f.read(SPLIT_SIZE)
+            if not chunk:
+                break
+            part_name = f"{base_name}.part{part_num:04d}"
+            part_path = os.path.join(dest_dir, part_name)
+            with open(part_path, "wb") as p:
+                p.write(chunk)
+            part_num += 1
+    print(f"  تقسیم شد به {part_num} قطعه: {base_name}")
 
 def main():
-    print(f"دریافت لیست فایل‌های مخزن {MODEL_NAME} ...")
-    try:
-        # token=None برای مدل عمومی بدون خطا کار می‌کند
-        files = list_repo_files(MODEL_NAME, token=HF_TOKEN)
-    except Exception as e:
-        print(f"❌ خطا در دریافت لیست فایل‌ها: {e}")
-        print("لطفاً بررسی کنید که نام مدل صحیح باشد و در صورت نیاز به دسترسی، توکن HF_TOKEN را تنظیم کرده باشید.")
-        sys.exit(1)
+    if not os.path.exists(MODEL_DIR):
+        print("پوشهٔ model_files وجود ندارد. ابتدا دانلود کنید.")
+        return
 
-    print(f"تعداد فایل‌ها: {len(files)}")
+    # پاک‌سازی پوشهٔ chunks (اختیاری)
+    if os.path.exists(CHUNKS_DIR):
+        shutil.rmtree(CHUNKS_DIR)
+    os.makedirs(CHUNKS_DIR, exist_ok=True)
 
-    for f in files:
-        if f.endswith("/"):   # پوشه‌ها را نادیده بگیر
-            continue
+    for root, dirs, files in os.walk(MODEL_DIR):
+        for f in files:
+            full_path = os.path.join(root, f)
+            relative_path = os.path.relpath(full_path, MODEL_DIR)
+            target_dir = os.path.join(CHUNKS_DIR, os.path.dirname(relative_path))
 
-        url = hf_hub_url(MODEL_NAME, f, revision="main")
+            file_size = os.path.getsize(full_path)
 
-        # دریافت حجم فایل با HEAD
-        head_headers = {}
-        if HF_TOKEN:
-            head_headers["Authorization"] = f"Bearer {HF_TOKEN}"
-        head_resp = requests.head(url, headers=head_headers)
-        head_resp.raise_for_status()
-        file_size = int(head_resp.headers.get("Content-Length", 0))
-        dest_path = os.path.join(OUTPUT_DIR, f)
+            if file_size > SPLIT_SIZE:
+                print(f"تقسیم فایل بزرگ: {relative_path} ({file_size} بایت)")
+                split_file(full_path, target_dir, relative_path)
+            else:
+                # کپی مستقیم
+                os.makedirs(target_dir, exist_ok=True)
+                dest = os.path.join(target_dir, f)
+                shutil.copy2(full_path, dest)
+                print(f"کپی مستقیم: {relative_path}")
 
-        print(f"\nفایل: {f} ({file_size:,} بایت)")
-        if file_size > CHUNK_SIZE:
-            print(f"  حجم > {CHUNK_SIZE:,} بایت → دانلود تکه‌تکه")
-            download_file_in_chunks(url, dest_path, file_size)
-        else:
-            print("  دانلود مستقیم ...")
-            os.makedirs(os.path.dirname(dest_path) if os.path.dirname(dest_path) else ".", exist_ok=True)
-            dl_headers = {}
-            if HF_TOKEN:
-                dl_headers["Authorization"] = f"Bearer {HF_TOKEN}"
-            resp = requests.get(url, headers=dl_headers)
-            resp.raise_for_status()
-            with open(dest_path, "wb") as fout:
-                fout.write(resp.content)
-            print(f"  ذخیره شد: {dest_path}")
-
-    print("\n✅ همه فایل‌ها با موفقیت دریافت و یکپارچه شدند.")
+    print("\nتمام فایل‌ها آمادهٔ کامیت در پوشهٔ model_chunks/ هستند.")
 
 if __name__ == "__main__":
     main()
