@@ -1,0 +1,33 @@
+name: دانلود و یکپارچه‌سازی مدل
+
+on:
+  workflow_dispatch:   # اجرای دستی از تب Actions
+  push:
+    branches: [ "main" ]
+
+jobs:
+  download-model:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: pip install huggingface_hub requests
+
+      - name: Run download script
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}   # اگر مدل خصوصی است، توکن را در Secrets رپو بگذار
+        run: python download_model.py
+
+      # اختیاری: آپلود فایل‌های نهایی به عنوان artifact
+      - name: Upload model files as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PanDerm-model
+          path: model_files/
