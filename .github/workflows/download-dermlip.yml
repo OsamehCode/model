@@ -22,7 +22,7 @@ jobs:
           python -c "
           from huggingface_hub import snapshot_download
           
-          model_id = 'redlessone/DermLIP_PanDerm-base-w-PubMed-256'
+          model_id = 'neuml/pubmedbert-base-embeddings'
           
           print(f'Downloading all files from {model_id}...')
           # snapshot_download کل ریپازیتوری را دانلود می‌کند
