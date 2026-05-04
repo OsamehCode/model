@@ -1,12 +1,12 @@
-name: دانلود و یکپارچه‌سازی مدل
+name: دانلود، تقسیم و کامیت مدل
 
 on:
-  workflow_dispatch:   # اجرای دستی از تب Actions
+  workflow_dispatch:
   push:
     branches: [ "main" ]
 
 jobs:
-  download-model:
+  download-and-commit:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -20,14 +20,26 @@ jobs:
       - name: Install dependencies
         run: pip install huggingface_hub requests
 
-      - name: Run download script
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}   # اگر مدل خصوصی است، توکن را در Secrets رپو بگذار
+      - name: 1. دانلود مدل
         run: python download_model.py
 
-      # اختیاری: آپلود فایل‌های نهایی به عنوان artifact
-      - name: Upload model files as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: PanDerm-model
-          path: model_files/
+      - name: 2. تقسیم فایل‌های بزرگ و آماده‌سازی برای کامیت
+        run: python split_for_commit.py
+
+      - name: 3. کامیت و پوش فایل‌های قطعه‌قطعه
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # پوشه‌ی model_chunks (و نه model_files) را اضافه کن
+          git add model_chunks/
+          
+          # اگر تغییراتی وجود نداشت، خارج شو
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Add model chunks"
+            git push
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # این توکن خودکار توسط گیت‌هاب تزریق می‌شود
